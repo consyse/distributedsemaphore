@@ -1,3 +1,4 @@
+// Copyright 2018 John Bolliger.
 // Copyright 2017 Maru Sama. All rights reserved.
 // Use of this source code is governed by the MIT license
 // that can be found in the LICENSE file.
@@ -5,12 +6,13 @@
 // Package semaphore provides an implementation of counting semaphore primitive with possibility to change limit
 // after creation. This implementation is based on Compare-and-Swap primitive that in general case works faster
 // than other golang channel-based semaphore implementations.
-package semaphore // import "github.com/marusama/semaphore"
+package distsemaphore // import "github.com/consyse/distsemaphore"
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
+
+	"github.com/consyse/distsemaphore/recipe"
 )
 
 // Semaphore counting resizable semaphore synchronization primitive.
@@ -57,7 +59,7 @@ type semaphore struct {
 	state uint64
 
 	// broadcast fields
-	lock        sync.RWMutex
+	lock        recipe.RWMutex
 	broadcastCh chan struct{}
 }
 
@@ -137,10 +139,16 @@ func (s *semaphore) TryAcquire(n int) bool {
 		newCount := count + uint64(n)
 
 		if newCount <= limit {
-			if atomic.CompareAndSwapUint64(&s.state, state, limit<<32+newCount) {
+
+			if compareAndSwap(nil, state, limit<<32+newCount) {
 				// acquired
 				return true
 			}
+
+			//if atomic.CompareAndSwapUint64(&s.state, state, limit<<32+newCount) {
+			//	// acquired
+			//	return true
+			//}
 
 			// CAS failed, try again
 			continue
@@ -168,7 +176,8 @@ func (s *semaphore) Release(n int) int {
 		// new count
 		newCount := count - uint64(n)
 
-		if atomic.CompareAndSwapUint64(&s.state, state, state&0xFFFFFFFF00000000+newCount) {
+		// addr, old, new
+		if compareAndSwap(nil, state, state&0xFFFFFFFF00000000 + newCount) {
 
 			// notifying possible waiters only if there weren't free slots before
 			if count >= limit {
@@ -184,6 +193,24 @@ func (s *semaphore) Release(n int) int {
 
 			return int(count)
 		}
+
+
+		//if atomic.CompareAndSwapUint64(&s.state, state, state&0xFFFFFFFF00000000+newCount) {
+		//
+		//	// notifying possible waiters only if there weren't free slots before
+		//	if count >= limit {
+		//		newBroadcastCh := make(chan struct{})
+		//		s.lock.Lock()
+		//		oldBroadcastCh := s.broadcastCh
+		//		s.broadcastCh = newBroadcastCh
+		//		s.lock.Unlock()
+		//
+		//		// send broadcast signal
+		//		close(oldBroadcastCh)
+		//	}
+		//
+		//	return int(count)
+		//}
 	}
 }
 
@@ -193,8 +220,9 @@ func (s *semaphore) SetLimit(limit int) {
 	}
 	for {
 		state := atomic.LoadUint64(&s.state)
-		if atomic.CompareAndSwapUint64(&s.state, state, uint64(limit)<<32+state&0xFFFFFFFF) {
-			newBroadcastCh := make(chan struct{})
+		//if atomic.CompareAndSwapUint64(&s.state, state, uint64(limit)<<32+state&0xFFFFFFFF) {
+		if compareAndSwap(nil, state,  uint64(limit)<<32+state&0xFFFFFFFF) {
+		newBroadcastCh := make(chan struct{})
 			s.lock.Lock()
 			oldBroadcastCh := s.broadcastCh
 			s.broadcastCh = newBroadcastCh

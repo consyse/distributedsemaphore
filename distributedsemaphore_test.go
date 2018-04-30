@@ -1,4 +1,4 @@
-package semaphore
+package distsemaphore
 
 import (
 	"context"

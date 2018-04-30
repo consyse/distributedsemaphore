@@ -1,4 +1,4 @@
-distributedsemaphore
+distsemaphore
 =========
 [![License](https://img.shields.io/github/license/mashape/apistatus.svg?maxAge=2592000)](LICENSE)
 
@@ -14,7 +14,7 @@ Based off of [github.com/marusama/semaphore](https://github.com/marusama/semapho
 ### Usage
 Initiate
 ```go
-import "github.com/consyse/semaphore"
+import "github.com/consyse/distsemaphore"
 ...
 sem := semaphore.New(5) // new semaphore with limit = 5
 ```
